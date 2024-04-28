@@ -5,29 +5,16 @@ using namespace std;
 class User
 {
 private:
-    string name_p; //имя
-    string password_p;//пароль
+    std::string name_p;     // Имя пользователя
+    std::string password_p; // Пароль пользователя
 
 public:
+    // Конструкторы
+    User() : name_p(""), password_p("") {}
+    User(const std::string& name, const std::string& password)
+        : name_p(name), password_p(password) {}
 
-    User()//
-    {
-        name_p = " ";
-        password_p = " ";
-    };
-
-    //Конструктор быстрого заполнения
-    User(const string& name, const string& password) :name_p(name), password_p(password)
-    {};
-
-    //геттеры
-    string& getName()
-    {
-        return name_p;
-    };
-
-    string& getPassword()
-    {
-        return password_p;
-    };
+    // Геттеры для получения значений полей
+    const std::string& getName() const { return name_p; }
+    const std::string& getPassword() const { return password_p; }
 };

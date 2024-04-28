@@ -1,8 +1,8 @@
 #include<iostream>
 #include<string>
+#include <list>
 #include"Hello.h"
 #include"User.h"
-
 #include"Message.h"
 using namespace std;
 
@@ -73,77 +73,50 @@ template<typename U>
 class MemoryUser
 {
 private:
-    int size1;
-    U* data1;
-    int j;
+    std::list<User> users;
+
 public:
-    MemoryUser()
-    {
-        size1 = 1;
-        j = 0;
-        data1 = new U[size1];
-    };
-
-    ~MemoryUser()
-    {
-        delete[] data1;
-    };
-
-    int getSize1()
-    {
-        return j; // Количество добавленных пользователей,
-    };
-
-    U* getUser(int index) {
-        // Изменено на возвращение указателя и добавлена проверка границ
-        if (index < 0 || index >= j) {
-            return nullptr;
-        }
-        return &data1[index];
+    // функция для добавления нового пользователя
+    void addUser(const User& user) {
+        users.push_back(user);
     }
 
-    void AddUsers(const U& value)
-    {
-        if (j >= size1)
-        {
-            // Увеличиваем размер массива
-            int newSize1 = size1 * 2;
-            U* newData1 = new U[newSize1];
-            for (int t = 0; t < size1; t++)
-            {
-                newData1[t] = data1[t];
-            }
-
-            delete[] data1; // Удаляем старые данные
-            data1 = newData1;
-            size1 = newSize1;
+    // функция для получения пользователя по индексу
+    User* getUser(int index) {
+        if (index < 0 || index >= users.size()) {
+            return nullptr;
         }
+        auto it = users.begin();
+        std::advance(it, index);
+        return &(*it);
+    }
 
-        // Теперь, когда у нас есть наверняка место, добавляем новый элемент
-        data1[j++] = value;
-
-    };
+    // функция для получения количества пользователей
+    int getSize() {
+        return users.size();
+    }
 };
+
 
 
 
 class Chat
 {
-    Memory<Message>messages;
+    list<Message> messages; // Заменяем Memory<Message> на std::list<Message>
 public:
-    //функцией берём данные
     void sendMessage(const string& recepient, const string& send, const string& text)
     {
-        //создаём обьект другого класса и наполняем
         Message message1(recepient, send, text);
-
-        messages.AddSms(message1);//помещаем в массив
-
+        messages.push_back(message1); // Используем push_back для добавления сообщения в конец списка
     };
 
-    void DisplayMessages()
+    void displayMessages()
     {
-        messages.Display();
+        for (const auto& message : messages)
+        {
+            cout << "В чате есть сообщение!!! Кому:  " << message.getRecepient() << ". От кого: " << message.getSend() << endl;
+            cout << "cообщение: " << "'" << message.getText() << "'" << endl;
+        }
     };
 };
 
@@ -157,9 +130,8 @@ int main()
 	hello();
 
 
-    MemoryUser<User>Tolpa;
-    //User Noubody;
-    User* currentUser = nullptr;
+    list<User> users; // Используем std::list для хранения пользователей
+    const User* currentUser = nullptr;
 
 
     cout << "Регистрация\n";
@@ -169,7 +141,7 @@ int main()
     cout << "Введите пароль: " << endl;
     cin >> password;
     User First(username, password);
-    Tolpa.AddUsers(First);
+    users.push_back(First); // Добавляем пользователя в конец списка пользователей
     cout << "Вы успешно зарегистрировались!Теперь войдите в аккаунт." << endl;
 
     cout << " \n";
@@ -193,8 +165,14 @@ int main()
     Chat chat;
     do {
         cin >> choice;
+
+        if (choice < 1 || choice > 5) {
+            cout << "Вы ввели неправильное значение. Пожалуйста, выберите действие от 1 до 5." << endl;
+            continue; // Переходим к следующей итерации цикла
+        }
+
         switch (choice)
-        {///////////
+        {
             {case 1:
                 if (currentUser != nullptr) { // только если пользователь вошел
                     string recipient, text;
@@ -217,23 +195,29 @@ int main()
 
 
             {case 2:
-                cout << "Вход в существующий аккаунт\n" << endl;
+                cout << "Вход в существующий аккаунт\n";
                 string username1, password1;
-                cout << "Введите логин: " << endl;
+                cout << "Введите логин: ";
                 cin >> username1;
-                cout << "Введите пароль: " << endl;
+                cout << "Введите пароль: ";
                 cin >> password1;
 
-                for (int k = 0; k < Tolpa.getSize1(); k++) {
-                    User* user = Tolpa.getUser(k); // Получаем указатель на пользователя
-                    if (user != nullptr && user->getName() == username1 && user->getPassword() == password1) {
-                        currentUser = user; // Устанавливаем currentUser напрямую
-                        cout << "Вы успешно вошли в аккаунт!" << endl;
-                        chat.DisplayMessages();
+                // Проходим по списку пользователей и ищем пользователя с введенным логином и паролем
+                bool found = false;
+                for (const auto& user : users) {
+                    if (user.getName() == username1 && user.getPassword() == password1) {
+                        currentUser = &user;
+                        found = true;
                         break;
                     }
                 }
-                if (currentUser == nullptr) {
+
+                // Если пользователь найден, выводим сообщения чата
+                if (found) {
+                    cout << "Вы успешно вошли в аккаунт!" << endl;
+                    // Добавьте здесь код для отображения сообщений чата, если необходимо
+                }
+                else {
                     cout << "Неправильный логин или пароль." << endl;
                 }
                 break;
@@ -243,18 +227,31 @@ int main()
 
             {case 3:
                 cout << "Регистрация\n";
-                cout << "Введите логин: " << endl;
-                cin >> username;
-                cout << "Введите пароль: " << endl;
-                cin >> password;
-                User newUser(username, password);
-                Tolpa.AddUsers(newUser);
-                currentUser = Tolpa.getUser(Tolpa.getSize1() - 1); // Используем возвращаемый указатель
-                cout << "Вы успешно зарегистрировались!" << endl;
-                cout << "  " << endl;
-                //if (currentUser != nullptr) { // Проверка на nullptr
-                //    chat.DisplayMessages();
-                //}
+                string newUsername, newPassword;
+                cout << "Введите логин: ";
+                cin >> newUsername;
+                cout << "Введите пароль: ";
+                cin >> newPassword;
+
+                // Проверяем, существует ли пользователь с таким логином
+                bool userExists = false;
+                for (const auto& user : users) {
+                    if (user.getName() == newUsername) {
+                        userExists = true;
+                        break;
+                    }
+                }
+
+                if (!userExists) {
+                    // Создаем нового пользователя и добавляем его в список
+                    User newUser(newUsername, newPassword);
+                    users.push_back(newUser);
+                    currentUser = &users.back(); // Устанавливаем currentUser на только что созданного пользователя
+                    cout << "Вы успешно зарегистрировались!" << endl;
+                }
+                else {
+                    cout << "Пользователь с таким логином уже существует. Выберите другой логин." << endl;
+                }
                 break;
             }
 
@@ -282,7 +279,7 @@ int main()
 
         };//////
 
-    } while (choice != 5);
+    } while (choice != 5 );
 
 	return 0;
 }
