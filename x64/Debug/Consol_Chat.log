@@ -1,2 +1,4 @@
 ﻿  Main.cpp
-  Consol_Chat.vcxproj -> D:\lab\repos\ConsolChat_Kontrol\ConsolChat_Kontrol\x64\Debug\Consol_Chat.exe
+  Consol_Chat.vcxproj -> D:\lab\repos\ConsolChat_Kontrol\x64\Debug\Consol_Chat.exe
+  "pwsh.exe" не является внутренней или внешней
+  командой, исполняемой программой или пакетным файлом.

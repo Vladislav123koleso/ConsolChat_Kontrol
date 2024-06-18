@@ -1,1 +1,2 @@
 D:\lab\repos\ConsolChat_Kontrol\ConsolChat_Kontrol\x64\Debug\Consol_Chat.exe
+D:\lab\repos\ConsolChat_Kontrol\x64\Debug\Consol_Chat.exe

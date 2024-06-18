@@ -1,232 +1,202 @@
-#include<iostream>
-#include<string>
+#include <iostream>
+#include <string>
 #include <list>
-#include"Hello.h"
-#include"User.h"
-#include"Message.h"
+#include "mysql.h"
+#include "Hello.h"
+#include "User.h"
+#include "Message.h"
+
 using namespace std;
-
-
-//массив сообщений 
-template<typename T>
-class Memory {
-private:
-    int size;
-    T* data;
-    int i;
-public:
-    Memory()
-    {
-        size = 1;
-        data = new T[size];
-        i = 0;
-    };
-    ~Memory()
-    {
-        delete[] data;
-    };
-
-    void AddSms(const T& value)
-    {
-        if (i < size)
-        {
-            data[i] = value;
-            ++i;
-        }
-        else
-        {
-            int newSize = size * 2;
-            T* newData = new T[newSize];
-            for (int j = 0; j < size; j++)
-            {
-                newData[j] = data[j];
-            }
-
-            newData[i] = value;
-            ++i;
-            delete[] data;
-            data = newData;
-            size = newSize;
-        };
-    };
-
-    void Display()
-    {
-        for (int f = 0; f < i; f++)
-        {
-            cout << "В чате есть сообщение!!! Кому:  " << data[f].getRecepient() << ". От кого: " << data[f].getSend() << endl;
-            cout << "cообщение: " << "'" << data[f].getText() << "'" << endl;
-        };
-
-    };
-
-
-};
-
-
-
-
-
-
-//массив юзеров
-template<typename U>
-class MemoryUser
-{
-private:
-    std::list<User> users;
-
-public:
-    // функция для добавления нового пользователя
-    void addUser(const User& user) {
-        users.push_back(user);
-    }
-
-    // функция для получения пользователя по индексу
-    User* getUser(int index) {
-        if (index < 0 || index >= users.size()) {
-            return nullptr;
-        }
-        auto it = users.begin();
-        std::advance(it, index);
-        return &(*it);
-    }
-
-    // функция для получения количества пользователей
-    int getSize() {
-        return users.size();
-    }
-};
-
-
-
 
 class Chat
 {
-    list<Message> messages; // Заменяем Memory<Message> на std::list<Message>
+    list<Message> messages; 
+
 public:
-    void sendMessage(const string& recepient, const string& send, const string& text)
+    void sendMessage(MYSQL* mysql, const string& recipient, const string& sender, const string& text)
     {
-        Message message1(recepient, send, text);
-        messages.push_back(message1); // Используем push_back для добавления сообщения в конец списка
-    };
+        // Сохраняем сообщение в базе данных
+        string query = "INSERT INTO messages (recipient_id, sender_id, text) VALUES "
+            "((SELECT id FROM users WHERE username = '" + recipient + "'), "
+            "(SELECT id FROM users WHERE username = '" + sender + "'), '" + text + "')";
+
+        if (mysql_query(mysql, query.c_str())) {
+            cout << "Error: failed to insert message into database " << mysql_error(mysql) << endl;
+        }
+        else {
+            Message message1(recipient, sender, text);
+            messages.push_back(message1);
+        }
+    }
+
+    void loadMessages(MYSQL* mysql, const string& currentUser)
+    {
+        // Очищаем список сообщений перед загрузкой новых
+        messages.clear();
+
+        // Загружаем сообщения из базы данных для текущего пользователя
+        string query = "SELECT sender.username, recipient.username, messages.text FROM messages "
+            "JOIN users AS sender ON messages.sender_id = sender.id "
+            "JOIN users AS recipient ON messages.recipient_id = recipient.id "
+            "WHERE sender.username = '" + currentUser + "' OR recipient.username = '" + currentUser + "'";
+
+        if (mysql_query(mysql, query.c_str())) {
+            cout << "Error: failed to retrieve messages from database " << mysql_error(mysql) << endl;
+            return;
+        }
+
+        MYSQL_RES* res = mysql_store_result(mysql);
+        if (res == nullptr) {
+            cout << "Error: failed to store result " << mysql_error(mysql) << endl;
+            return;
+        }
+
+        MYSQL_ROW row;
+        while ((row = mysql_fetch_row(res)) != NULL) {
+            string sender = row[0];
+            string recipient = row[1];
+            string text = row[2];
+            Message message(recipient, sender, text);
+            messages.push_back(message);
+        }
+
+        mysql_free_result(res);
+    }
 
     void displayMessages()
     {
+        if (messages.empty()) {
+            cout << "У вас нет сообщений.\n";
+            return;
+        }
+
         for (const auto& message : messages)
         {
-            cout << "В чате есть сообщение!!! Кому:  " << message.getRecepient() << ". От кого: " << message.getSend() << endl;
-            cout << "cообщение: " << "'" << message.getText() << "'" << endl;
+            cout << "От: " << message.getSend() << ", Кому: " << message.getRecepient() << "\nСообщение: " << message.getText() << endl;
         }
-    };
+    }
 };
-
-
-
-
 
 int main()
 {
+    MYSQL mysql;
+    mysql_init(&mysql);
+
     system("chcp 1251");
-	hello();
+    hello();
 
+    if (&mysql == NULL) {
+        cout << "Error: can't create MySQL-descriptor" << endl;
+        return 1;
+    }
 
-    list<User> users; // Используем std::list для хранения пользователей
-    const User* currentUser = nullptr;
+    // Подключаемся к серверу
+    if (!mysql_real_connect(&mysql, "localhost", "root", "admin", "chat_skillfactory_mySQL", 0, NULL, 0)) {
+        cout << "Error: can't connect to database " << mysql_error(&mysql) << endl;
+        return 1;
+    }
+    else {
+        cout << "Success!" << endl;
+    }
 
+    list<User> users;
+    User* currentUser = nullptr;
 
-    cout << "Регистрация\n";
+    // Загрузка пользователей из базы данных
+    if (mysql_query(&mysql, "SELECT username, password FROM users")) {
+        cout << "Error: failed to retrieve users from database " << mysql_error(&mysql) << endl;
+    }
+    else {
+        MYSQL_RES* res = mysql_store_result(&mysql);
+        MYSQL_ROW row;
+
+        while ((row = mysql_fetch_row(res))) {
+            string username = row[0];
+            string password = row[1];
+            User user(username, password);
+            users.push_back(user);
+        }
+
+        mysql_free_result(res);
+    }
+
     string username, password;
-    cout << "Введите логин: " << endl;
-    cin >> username;
-    cout << "Введите пароль: " << endl;
-    cin >> password;
-    User First(username, password);
-    users.push_back(First); // Добавляем пользователя в конец списка пользователей
-    cout << "Вы успешно зарегистрировались!Теперь войдите в аккаунт." << endl;
+    
+    User first(username, password);
 
-    cout << " \n";
-    cout << "Выберите действие:\n ";
 
-    cout << "1. Послать сообщение\n";
-
-    cout << "2. Войти в существующий аккаунт\n";
-
-    cout << "3. Создать новый аккаунт\n";
-
-    cout << "4. Выход из аккаунта\n";
-
-    cout << "5. Завершить\n";
-
-    cout << " \n";
-
-    cout << "В дальнейшем пользуйтесь этими кнопками" << endl;
     int choice;
-
     Chat chat;
+
     do {
+        cout << " \n";
+        cout << "Выберите действие:\n ";
+        cout << "1. Послать сообщение\n";
+        cout << "2. Войти в существующий аккаунт\n";
+        cout << "3. Создать новый аккаунт\n";
+        cout << "4. Просмотреть переписку\n";
+        cout << "5. Выход из аккаунта\n";
+        cout << "6. Завершить\n";
+        cout << " \n";
+        cout << "В дальнейшем пользуйтесь этими кнопками" << endl;
+
         cin >> choice;
 
         if (choice < 1 || choice > 5) {
             cout << "Вы ввели неправильное значение. Пожалуйста, выберите действие от 1 до 5." << endl;
-            continue; // Переходим к следующей итерации цикла
+            continue;
         }
 
         switch (choice)
         {
-            {case 1:
-                if (currentUser != nullptr) { // только если пользователь вошел
-                    string recipient, text;
-                    cout << "Введите получателя: ";
-                    cin >> recipient;
-                    cout << "Введите текст сообщения: ";
-                    cin.ignore();
-                    getline(cin, text);
+        case 1:
+            if (currentUser != nullptr) {
+                string recipient, text;
+                cout << "Введите получателя: ";
+                cin >> recipient;
+                cout << "Введите текст сообщения: ";
+                cin.ignore();
+                getline(cin, text);
 
-                    chat.sendMessage(recipient, currentUser->getName(), text);
-                    cout << "Сообщение отправлено!\n";
-                    cout << " \n";
-                    cout << " \n";
-                }
-                else {
-                    cout << "Вы не вошли в систему. Сначала войдите в свой аккаунт нажав 2.\n";
-                }
-                break;
+                chat.sendMessage(&mysql, recipient, currentUser->getName(), text);
+                cout << "Сообщение отправлено!\n";
             }
+            else {
+                cout << "Вы не вошли в систему. Сначала войдите в свой аккаунт, нажав 2.\n";
+            }
+            break;
 
-
-            {case 2:
-                cout << "Вход в существующий аккаунт\n";
+        case 2:
+            cout << "Вход в существующий аккаунт\n";
+            {
                 string username1, password1;
                 cout << "Введите логин: ";
                 cin >> username1;
                 cout << "Введите пароль: ";
                 cin >> password1;
 
-                // Проходим по списку пользователей и ищем пользователя с введенным логином и паролем
-                bool found = false;
-                for (const auto& user : users) {
-                    if (user.getName() == username1 && user.getPassword() == password1) {
-                        currentUser = &user;
-                        found = true;
-                        break;
-                    }
-                }
-
-                // Если пользователь найден, выводим сообщения чата
-                if (found) {
-                    cout << "Вы успешно вошли в аккаунт!" << endl;
-                    // Добавьте здесь код для отображения сообщений чата, если необходимо
+                // Проверяем логин и пароль пользователя
+                string query = "SELECT username, password FROM users WHERE username = '" + username1 + "' AND password = '" + password1 + "'";
+                if (mysql_query(&mysql, query.c_str())) {
+                    cout << "Error: failed to retrieve user from database " << mysql_error(&mysql) << endl;
                 }
                 else {
-                    cout << "Неправильный логин или пароль." << endl;
+                    MYSQL_RES* res = mysql_store_result(&mysql);
+                    if (mysql_num_rows(res) == 1) {
+                        currentUser = &users.front(); // Устанавливаем текущего пользователя
+                        cout << "Вы успешно вошли в аккаунт!" << endl;
+                    }
+                    else {
+                        cout << "Неправильный логин или пароль." << endl;
+                    }
+                    mysql_free_result(res);
                 }
-                break;
             }
+            break;
 
-
-
-            {case 3:
-                cout << "Регистрация\n";
+        case 3:
+            cout << "Регистрация\n";
+            {
                 string newUsername, newPassword;
                 cout << "Введите логин: ";
                 cin >> newUsername;
@@ -234,54 +204,62 @@ int main()
                 cin >> newPassword;
 
                 // Проверяем, существует ли пользователь с таким логином
-                bool userExists = false;
-                for (const auto& user : users) {
-                    if (user.getName() == newUsername) {
-                        userExists = true;
-                        break;
-                    }
-                }
-
-                if (!userExists) {
-                    // Создаем нового пользователя и добавляем его в список
-                    User newUser(newUsername, newPassword);
-                    users.push_back(newUser);
-                    currentUser = &users.back(); // Устанавливаем currentUser на только что созданного пользователя
-                    cout << "Вы успешно зарегистрировались!" << endl;
+                string query = "SELECT username FROM users WHERE username = '" + newUsername + "'";
+                if (mysql_query(&mysql, query.c_str())) {
+                    cout << "Error: failed to check username in database " << mysql_error(&mysql) << endl;
                 }
                 else {
-                    cout << "Пользователь с таким логином уже существует. Выберите другой логин." << endl;
+                    MYSQL_RES* res = mysql_store_result(&mysql);
+                    if (mysql_num_rows(res) == 0) {
+                        // Сохраняем нового пользователя в базе данных
+                        query = "INSERT INTO users (username, password) VALUES ('" + newUsername + "', '" + newPassword + "')";
+                        if (mysql_query(&mysql, query.c_str())) {
+                            cout << "Error: failed to insert user into database " << mysql_error(&mysql) << endl;
+                        }
+                        else {
+                            User newUser(newUsername, newPassword);
+                            users.push_back(newUser);
+                            currentUser = &users.back();
+                            cout << "Вы успешно зарегистрировались!" << endl;
+                        }
+                    }
+                    else {
+                        cout << "Пользователь с таким логином уже существует. Выберите другой логин." << endl;
+                    }
+                    mysql_free_result(res);
                 }
-                break;
             }
-
-            {case 4:
-                currentUser = nullptr; // Устанавливаем currentUser в nullptr при выходе
-                cout << "Выход выполнен. Войдите в существующий аккаунт нажав 2 или зарегестрируйтесь нажав 3\n";
-                cout << " \n";
-                cout << " \n";
-                break;
-            }
-
-            {case 5:
-
-                cout << "Вы выполнили учебный выход из чата\n";
-                cout << "В будущем эта кнопка будет закрывть всю консоль\n";
-                cout << "А пока - это только учебный проект" << endl;
-                break;
-            }
-
-
-
-        default:
-            cout << "Вы ввели неправильное значение" << endl;
             break;
 
-        };//////
+        case 4:
+            if (currentUser != nullptr) {
+                chat.loadMessages(&mysql, currentUser->getName());
+                chat.displayMessages();
+            }
+            else {
+                cout << "Вы не вошли в систему. Сначала войдите в свой аккаунт, нажав 2.\n";
+            }
+            break;
 
-    } while (choice != 5 );
+        case 5:
+            currentUser = nullptr;
+            cout << "Выход выполнен. Войдите в существующий аккаунт, нажав 2, или зарегистрируйтесь, нажав 3.\n";
+            break;
 
-	return 0;
+        case 6:
+            cout << "Вы выполнили учебный выход из чата.\n";
+            cout << "В будущем эта кнопка будет закрывать всю консоль.\n";
+            cout << "А пока это только учебный проект.\n";
+            break;
+
+        default:
+            cout << "Вы ввели неправильное значение.\n";
+            break;
+        }
+    } while (choice != 5);
+
+    // Закрываем соединение с базой данных
+    mysql_close(&mysql);
+
+    return 0;
 }
-
-
