@@ -5,14 +5,18 @@
 #include "Hello.h"
 #include "User.h"
 #include "Message.h"
+#include "Logger.h"
 
 using namespace std;
 
 class Chat
 {
-    list<Message> messages; 
+    list<Message> messages;
+    Logger logger;
 
 public:
+    Chat() : logger("log.txt") {};
+
     void sendMessage(MYSQL* mysql, const string& recipient, const string& sender, const string& text)
     {
         // Сохраняем сообщение в базе данных
@@ -26,6 +30,9 @@ public:
         else {
             Message message1(recipient, sender, text);
             messages.push_back(message1);
+
+            // логирование
+            logger.logMessage("От: " + sender + " , кому: " + recipient + " , сообщение: " + text);
         }
     }
 
@@ -58,6 +65,9 @@ public:
             string text = row[2];
             Message message(recipient, sender, text);
             messages.push_back(message);
+
+            //логирование
+            logger.logMessage("Загружено сообщение от " + sender + ", кому " + recipient + ", сообщение: " + text + "");
         }
 
         mysql_free_result(res);
@@ -72,6 +82,7 @@ public:
 
         for (const auto& message : messages)
         {
+            //
             cout << "От: " << message.getSend() << ", Кому: " << message.getRecepient() << "\nСообщение: " << message.getText() << endl;
         }
     }
@@ -183,8 +194,18 @@ int main()
                 else {
                     MYSQL_RES* res = mysql_store_result(&mysql);
                     if (mysql_num_rows(res) == 1) {
-                        currentUser = &users.front(); // Устанавливаем текущего пользователя
-                        cout << "Вы успешно вошли в аккаунт!" << endl;
+                        // Найти пользователя в списке пользователей
+                        auto it = find_if(users.begin(), users.end(), [&](const User& user) {
+                            return user.getName() == username1;
+                            });
+
+                        if (it != users.end()) {
+                            currentUser = &(*it); // Устанавливаем текущего пользователя
+                            cout << "Вы успешно вошли в аккаунт!" << endl;
+                        }
+                        else {
+                            cout << "Ошибка: пользователь найден в базе данных, но отсутствует в списке пользователей." << endl;
+                        }
                     }
                     else {
                         cout << "Неправильный логин или пароль." << endl;
